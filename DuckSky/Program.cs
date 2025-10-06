@@ -15,15 +15,15 @@ var dukManager = new RandomDukManager();
 
 BlueskyAgent agent = new();
 
-var loginResult = await agent.Login(username, password, service: pds);
+var loginResult = await agent.Login(identifier: username, password: password, service: pds);
 
 if (loginResult.Succeeded)
 {
     var duckFound = await dukManager.GetQuack();
     byte[]? duckPic = null;
-    var duckId = Convert.ToInt64(duckFound.Url?.Replace(".gif", "").Replace("https://random-d.uk/api/", "")
-        .Replace(".jpg", ""));
-    if (duckFound.Url != null && duckFound.Url.EndsWith(".jpg"))
+    var duckId = Convert.ToInt64(duckFound.Url?.Replace(".gif", "").Replace(".JPG", "").Replace("http://", "https://").Replace("https://random-d.uk/api/", "")
+        .Replace(".jpg", "").Replace(".JPG", ""));
+    if (duckFound.Url != null && (duckFound.Url.EndsWith(".jpg") || duckFound.Url.EndsWith(".JPG")))
     {
         duckPic = await dukManager.GetDuckImageJpegById(duckId);
         var imageUploadResult = await agent.UploadImage(duckPic, "image/jpg", "A picture of a duck", null);
@@ -57,6 +57,11 @@ if (loginResult.Succeeded)
             // Execute conversion
             await ffmpeg.ConvertAsync(inputFile, outputFile, conversionOptions, CancellationToken.None);
 
+            var metaData = await ffmpeg.GetMetaDataAsync(inputFile, CancellationToken.None);
+            
+            var aspectRatio = metaData.VideoData.FrameSize;
+            var aspect = aspectRatio.Split("x");
+
             // Read the converted WEBM file
             var webmBytes = await File.ReadAllBytesAsync(tempWebmPath);
 
@@ -78,10 +83,10 @@ if (loginResult.Succeeded)
                 videoUploadResult.EnsureSucceeded();
             }
 
-            if (videoUploadResult is { Succeeded: true })
+            if (videoUploadResult is { Succeeded: true } && videoUploadResult.Result.Blob is not null && videoUploadResult.Result.State == idunno.Bluesky.Video.JobState.Completed)
             {
-                EmbeddedVideo video = new(videoUploadResult.Result.Blob!, altText: "Alt Text");
-                var res = await agent.Post("\u200b", video);
+                EmbeddedVideo video = new(videoUploadResult.Result.Blob!, altText: "Alt Text", aspectRatio: new AspectRatio(Convert.ToInt32(aspect[0]), Convert.ToInt32(aspect[1])));
+                var res = await agent.Post(text: "\u200b", langs: ["en-US"],  video: video);
             }
         }
         finally
